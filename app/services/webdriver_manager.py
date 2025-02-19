@@ -17,6 +17,7 @@ def initialize_webdriver():
 
         global_driver = webdriver.Chrome(service=service, options=options)
         global_driver.get("chrome-extension://ophjlpahpchlmihnnnihgmmeilfjmjjc/index.html#/")
+
         print("✅ WebDriver 已啟動")
 
 def shutdown_webdriver():
@@ -24,4 +25,13 @@ def shutdown_webdriver():
     global global_driver
     if global_driver:
         global_driver.quit()
+        global_driver = None
         print("🛑 WebDriver 已關閉")
+
+def get_webdriver():
+    """確保 WebDriver 是可用的"""
+    global global_driver
+    if global_driver is None:
+        print("⚠️ WebDriver 尚未初始化，正在初始化...")
+        initialize_webdriver()
+    return global_driver

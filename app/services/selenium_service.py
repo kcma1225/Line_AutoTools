@@ -6,55 +6,63 @@ from selenium.webdriver.support import expected_conditions as EC
 
 class LineAutoLogin:
     def __init__(self, driver, email, password):
-        """初始化，直接使用已啟動的 WebDriver"""
         self.driver = driver
         self.email = email
         self.password = password
         self.pincode = None
         self.logged_in = False
+        self.login_failed = False  
 
     def login(self):
-        """執行 LINE 登入"""
         try:
-           
+            self.driver.get("chrome-extension://ophjlpahpchlmihnnnihgmmeilfjmjjc/index.html#/")
 
-            # 輸入 Email
             email_input = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.NAME, "email"))
             )
-            email_input.clear()  # 清除舊輸入
+            email_input.clear()
             email_input.send_keys(self.email)
 
-            # 輸入密碼
             password_input = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.NAME, "password"))
             )
-            password_input.clear()  # 清除舊輸入
+            password_input.clear()
             password_input.send_keys(self.password)
             password_input.send_keys(Keys.RETURN)
 
             return True
         except Exception as e:
             print(f"登入失敗: {e}")
+            self.login_failed = True
             return False
 
-    def check_pincode_and_status(self):
-        """持續監測是否有驗證碼 & 是否登入成功"""
-        for _ in range(30):  # 最多檢測 30 次（60 秒）
+    def get_pincode(self):
+        """檢測 PIN 碼，若有則回傳，登入成功後結束檢測"""
+        for _ in range(30):  # 最多等待 60 秒
             try:
-                # 檢測驗證碼
-                pincode_element = self.driver.find_element(By.CLASS_NAME, "pinCodeModal-module__pincode__bFKMn")
+                if self.logged_in:
+                    return {"pincode": None, "logged_in": True}
+
+                pincode_element = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "pinCodeModal-module__pincode__bFKMn"))
+                )
                 self.pincode = pincode_element.text.strip()
                 print(f"🔑 驗證碼: {self.pincode}")
-
-                # 檢測登入狀態（是否跳轉到好友列表）
-                if self.driver.current_url.endswith("/friends"):
-                    self.logged_in = True
-                    return {"logged_in": True, "pincode": self.pincode}
+                return {"pincode": self.pincode, "logged_in": False}
 
             except:
                 pass
 
-            time.sleep(2)  # 每 2 秒檢查一次
+            time.sleep(2)
 
-        return {"logged_in": self.logged_in, "pincode": self.pincode}
+        return {"pincode": None, "logged_in": self.logged_in}
+
+    def check_login_status(self):
+        """檢測是否成功登入，若進入 /friends 則回傳 True"""
+        for _ in range(30):  # 最多等待 60 秒
+            if self.driver.current_url.endswith("/friends"):
+                self.logged_in = True
+                return {"logged_in": True}
+            time.sleep(2)
+
+        return {"logged_in": False}

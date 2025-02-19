@@ -8,7 +8,7 @@
 </head>
 <body class="bg-gray-100 flex justify-center items-center h-screen">
 
-    <div id="loginContainer" class="bg-white shadow-lg rounded-lg p-6 w-96">
+    <div class="bg-white shadow-lg rounded-lg p-6 w-96">
         <h2 class="text-xl font-bold mb-4 text-center text-blue-600">LINE 自動登入</h2>
 
         <!-- 登入表單 -->
@@ -23,10 +23,10 @@
             </button>
         </form>
 
-        <!-- 提示文字 (動態更新) -->
+        <!-- 狀態顯示 -->
         <p id="status" class="text-center text-red-500 mt-2 hidden"></p>
 
-        <!-- 驗證碼顯示 -->
+        <!-- 驗證碼顯示區 -->
         <div id="pincodeContainer" class="mt-4 text-center hidden">
             <p class="text-lg font-bold text-green-600">請在手機輸入以下驗證碼：</p>
             <p id="pincodeDisplay" class="text-2xl font-bold text-green-700 mt-2"></p>
@@ -39,11 +39,6 @@
         </div>
     </div>
 
-    <!-- 登入成功後的頁面 -->
-    <div id="successContainer" class="hidden text-center">
-        <h2 class="text-2xl font-bold text-green-600">登入成功</h2>
-    </div>
-
     <script>
         document.getElementById("loginForm").addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -52,62 +47,59 @@
             const password = document.getElementById("password").value;
             const statusText = document.getElementById("status");
 
-            // 清除錯誤訊息 & 顯示加載動畫
             statusText.classList.add("hidden");
             document.getElementById("loading").classList.remove("hidden");
 
+            const formData = new FormData();
+            formData.append("email", email);
+            formData.append("password", password);
+
             const response = await fetch("/login", {
                 method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `email=${email}&password=${password}`
+                body: formData
             });
 
             const result = await response.json();
             if (result.success) {
-                document.getElementById("loading").classList.add("hidden");
-                checkStatus(); // 開始檢測登入狀態
+                startCheckingPincode();
+                startCheckingLogin();
             } else {
-                statusText.innerText = "登入失敗";
+                statusText.innerText = "登入失敗，請檢查帳號密碼";
                 statusText.classList.remove("hidden");
                 document.getElementById("loading").classList.add("hidden");
             }
         });
 
-        async function checkStatus() {
-            const statusText = document.getElementById("status");
-            let checkCount = 0;
+        let checkPincodeInterval;
+        let checkLoginInterval;
 
-            const interval = setInterval(async () => {
-                checkCount++;
-                const response = await fetch("/check-status");
+        function startCheckingPincode() {
+            checkPincodeInterval = setInterval(async () => {
+                const response = await fetch("/check-pincode");
                 const result = await response.json();
 
                 if (result.pincode) {
                     document.getElementById("pincodeContainer").classList.remove("hidden");
                     document.getElementById("pincodeDisplay").innerText = result.pincode;
-                    statusText.innerText = `驗證碼: ${result.pincode}`;
-                    statusText.classList.remove("hidden");
-                    statusText.classList.replace("text-red-500", "text-green-600");
                 }
 
                 if (result.logged_in) {
-                    clearInterval(interval);
-                    renderSuccessPage(); // 成功後切換頁面
-                }
-
-                // 當檢測 30 次後（約 60 秒），如果仍未成功登入，則視為登入失敗
-                if (checkCount >= 30 && !result.logged_in) {
-                    clearInterval(interval);
-                    statusText.innerText = "登入失敗";
-                    statusText.classList.remove("hidden");
-                    statusText.classList.replace("text-green-600", "text-red-500");
+                    clearInterval(checkPincodeInterval);
                 }
             }, 2000);
         }
 
-        function renderSuccessPage() {
-            document.getElementById("loginContainer").classList.add("hidden");
-            document.getElementById("successContainer").classList.remove("hidden");
+        function startCheckingLogin() {
+            checkLoginInterval = setInterval(async () => {
+                const response = await fetch("/check-login");
+                const result = await response.json();
+
+                if (result.logged_in) {
+                    clearInterval(checkLoginInterval);
+                    clearInterval(checkPincodeInterval);
+                    window.location.href = "/dashboard"; 
+                }
+            }, 2000);
         }
     </script>
 
