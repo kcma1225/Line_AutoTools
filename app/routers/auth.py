@@ -7,7 +7,7 @@ bot = None
 
 @router.post("/login")
 async def login(
-    email: str = Form(...),  # 使用 Form() 來解析 x-www-form-urlencoded
+    email: str = Form(...),
     password: str = Form(...)
 ):
     global bot
@@ -21,11 +21,11 @@ async def login(
 
 @router.get("/check-pincode")
 async def check_pincode():
-    """持續檢測 PIN 碼，若有則回傳，登入成功後結束檢測"""
+    """檢測 PIN 碼，若 5 秒內未出現則回傳登入失敗"""
     global bot
     if bot:
         return bot.get_pincode()
-    return {"pincode": None, "logged_in": False}
+    return {"pincode": None, "logged_in": False, "login_failed": True}
 
 @router.get("/check-login")
 async def check_login():
@@ -33,4 +33,4 @@ async def check_login():
     global bot
     if bot:
         return bot.check_login_status()
-    return {"logged_in": False}
+    return {"logged_in": False, "login_failed": True}
