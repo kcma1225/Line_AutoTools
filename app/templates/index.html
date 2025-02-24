@@ -6,73 +6,84 @@
     <title>LINE 自動登入</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 flex justify-center items-center h-screen">
+<body class="flex items-center justify-center h-screen bg-gray-100">
 
-    <div class="bg-white shadow-lg rounded-lg p-6 w-96">
-        <h2 class="text-xl font-bold mb-4 text-center text-blue-600">LINE 自動登入</h2>
+    <div class="w-full max-w-md p-8 space-y-6 bg-white shadow-lg rounded-lg">
+        <h2 class="text-2xl font-bold text-center text-gray-700">LINE 自動登入</h2>
 
-        <!-- 登入表單 -->
-        <form id="loginForm">
-            <input type="email" id="email" placeholder="輸入 Email"
-                class="w-full p-3 border rounded mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <input type="password" id="password" placeholder="輸入密碼"
-                class="w-full p-3 border rounded mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400">
+        <div id="status" class="hidden p-2 text-sm text-center text-red-600 bg-red-100 rounded-md"></div>
 
-            <button type="submit" class="w-full bg-blue-500 text-white p-3 rounded hover:bg-blue-600 transition">
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700">電子郵件</label>
+                <input type="email" id="email" name="email" required
+                    class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">密碼</label>
+                <input type="password" id="password" name="password" required
+                    class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <button type="submit"
+                class="w-full px-4 py-2 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">
                 登入
             </button>
+
+            <div id="loading" class="hidden text-center text-gray-600">登入中，請稍候...</div>
         </form>
+        
+        <button id="goToDashboard"
+            class="w-full px-4 py-2 mt-4 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">
+                 已登入，直接進入
+        </button>
 
-        <!-- 狀態顯示 -->
-        <p id="status" class="text-center text-red-500 mt-2 hidden"></p>
-
-        <!-- 驗證碼顯示區 -->
-        <div id="pincodeContainer" class="mt-4 text-center hidden">
-            <p class="text-lg font-bold text-green-600">請在手機輸入以下驗證碼：</p>
-            <p id="pincodeDisplay" class="text-2xl font-bold text-green-700 mt-2"></p>
-        </div>
-
-        <!-- 加載動畫 -->
-        <div id="loading" class="text-center mt-4 hidden">
-            <p class="text-gray-500 text-sm">登入中，請稍候...</p>
-            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+        <div id="pincodeContainer" class="hidden p-4 mt-4 text-center bg-yellow-100 border border-yellow-400 rounded-md">
+            <p class="text-lg font-semibold text-yellow-600">驗證碼</p>
+            <p id="pincodeDisplay" class="text-2xl font-bold text-gray-900"></p>
         </div>
     </div>
 
     <script>
         let loginAbortController = new AbortController();
         let detectAbortController = new AbortController();
-    
+        document.getElementById("goToDashboard").addEventListener("click", function() {
+            window.location.href = "/dashboard";
+        });
+
+
         window.onload = function() {
+
             document.getElementById("loginForm").addEventListener("submit", async (e) => {
                 e.preventDefault();
-    
+
                 const email = document.getElementById("email").value;
                 const password = document.getElementById("password").value;
                 const statusText = document.getElementById("status");
-    
+
                 statusText.classList.add("hidden");
                 document.getElementById("loading").classList.remove("hidden");
-    
+
                 // 停止所有舊請求，確保新的請求能立即生效
                 loginAbortController.abort();
                 detectAbortController.abort();
-    
+
                 // 重新初始化 AbortController
                 loginAbortController = new AbortController();
                 detectAbortController = new AbortController();
-    
+
                 const formData = new FormData();
                 formData.append("email", email);
                 formData.append("password", password);
-    
+
                 try {
                     const response = await fetch("/login", {
                         method: "POST",
                         body: formData,
                         signal: loginAbortController.signal
                     });
-    
+
                     const result = await response.json();
                     if (result.success) {
                         clearAllIntervals();
@@ -89,10 +100,10 @@
                 }
             });
         };
-    
+
         let checkPincodeInterval;
         let checkLoginInterval;
-    
+
         function startCheckingPincode() {
             checkPincodeInterval = setInterval(async () => {
                 try {
@@ -100,12 +111,12 @@
                         signal: detectAbortController.signal
                     });
                     const result = await response.json();
-    
+
                     if (result.pincode) {
                         document.getElementById("pincodeContainer").classList.remove("hidden");
                         document.getElementById("pincodeDisplay").innerText = result.pincode;
                     }
-    
+
                     if (result.logged_in || result.login_failed) {
                         clearAllIntervals();
                         if (result.login_failed) showError("登入失敗，請重新輸入帳號密碼");
@@ -117,7 +128,7 @@
                 }
             }, 2000);
         }
-    
+
         function startCheckingLogin() {
             checkLoginInterval = setInterval(async () => {
                 try {
@@ -125,12 +136,12 @@
                         signal: detectAbortController.signal
                     });
                     const result = await response.json();
-    
+
                     if (result.logged_in) {
                         clearAllIntervals();
                         window.location.href = "/dashboard"; 
                     }
-    
+
                     if (result.login_failed) {
                         clearAllIntervals();
                         showError("登入失敗，請重新輸入帳號密碼");
@@ -142,18 +153,18 @@
                 }
             }, 2000);
         }
-    
+
         function clearAllIntervals() {
             clearInterval(checkLoginInterval);
             clearInterval(checkPincodeInterval);
         }
-    
+
         function showError(message) {
             document.getElementById("status").innerText = message;
             document.getElementById("status").classList.remove("hidden");
             document.getElementById("loading").classList.add("hidden");
         }
-    
+
         window.addEventListener("beforeunload", clearAllIntervals);
     </script>
 

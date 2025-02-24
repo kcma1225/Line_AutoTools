@@ -34,3 +34,13 @@ async def check_login():
     if bot:
         return bot.check_login_status()
     return {"logged_in": False, "login_failed": True}
+
+@router.get("/check-webdriver-url")
+async def check_webdriver_url():
+    """檢測 WebDriver 當前 URL，判斷是否已登入"""
+    global bot
+    if bot and bot.driver:
+        current_url = bot.driver.current_url
+        if any(keyword in current_url for keyword in ["friends", "chats", "addFriend"]):
+            return {"logged_in": True}
+    return {"logged_in": False}

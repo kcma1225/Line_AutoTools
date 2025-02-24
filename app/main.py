@@ -29,5 +29,10 @@ async def shutdown_event():
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
 # **載入 `auth.py` API**
 app.include_router(auth.router)
