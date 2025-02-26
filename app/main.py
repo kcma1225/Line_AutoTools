@@ -34,5 +34,6 @@ async def home(request: Request):
 async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
+
 # **載入 `auth.py` API**
 app.include_router(auth.router)

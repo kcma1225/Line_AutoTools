@@ -3,43 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LINE 控制面板</title>
+    <title>定時傳訊</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="flex items-center justify-center h-screen bg-gray-100">
-
-    <div class="w-full max-w-md p-8 space-y-6 bg-white shadow-lg rounded-lg text-center">
-        <h2 class="text-2xl font-bold text-gray-700">LINE 控制面板</h2>
-
+<body class="h-screen flex">
+    <!-- 左側功能列表 -->
+    <div class="w-1/6 bg-gray-800 text-white p-6 flex flex-col space-y-4">
+        <h2 class="text-xl font-bold">功能列表</h2>
+        <div class="py-2 px-4 hover:bg-gray-700 cursor-pointer">定時傳訊</div>
+    </div>
+    
+    <!-- 右側內容區域 -->
+    <div class="w-5/6 p-8">
         <div id="loginStatus" class="text-lg font-semibold text-red-600 hidden">❌ 未登入</div>
-
-        <button id="backToLogin"
-            class="hidden w-full px-4 py-2 mt-4 font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700">
+        <button id="backToLogin" class="hidden px-4 py-2 mt-4 bg-blue-600 text-white rounded-md hover:bg-blue-700">
             返回登入頁面
         </button>
+        
+        <!-- 定時傳訊功能區域 -->
+        <div class="mt-6">
+            <button id="openPopup" class="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                建立定時傳訊
+            </button>
+            
+            <!-- 定時傳訊列表 -->
+            <div id="scheduleContainer" class="mt-4 p-4 bg-white shadow-lg rounded-lg">
+                <h3 class="text-lg font-bold">已建立的定時傳訊</h3>
+                <ul id="scheduleList" class="mt-2 text-gray-600">
+                    <!-- 模擬定時傳訊列表 -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Popup Form -->
+    <div id="popupForm" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 hidden flex items-center justify-center" onclick="closePopup(event)">
+        <div class="bg-white p-6 rounded-lg shadow-lg w-1/3 relative" onclick="event.stopPropagation()">
+            <button class="absolute top-2 right-2 text-gray-500" onclick="closePopup(event)">✖</button>
+            <h3 class="text-lg font-bold mb-4">建立定時傳訊</h3>
+            
+            <!-- 發訊對象區塊 -->
+            <div class="mb-4">
+                <button id="openRecipientPopup" class="px-3 py-2 bg-green-400 text-black rounded-md hover:bg-green-500 text-sm">新增發訊對象</button>
+                <div id="recipientList" class="border p-2 rounded-md min-h-[50px] bg-gray-100 mt-2 text-sm text-gray-700">
+                    <!-- 新增的發訊對象會顯示在這裡 -->
+                </div>
+            </div>
+            
+            <label class="block text-sm font-medium text-gray-700">時間</label>
+            <input type="time" class="w-full px-3 py-2 border rounded-md mt-1">
+            
+            <label class="block text-sm font-medium text-gray-700 mt-3">發訊息週期</label>
+            <input id="number" type="number" value="1" class="w-full px-3 py-2 border rounded-md mt-1">
+            
+            <!-- 訊息內容區塊 -->
+            <div class="mt-4">
+                <div class="flex items-center space-x-2">
+                    <input type="text" id="messageInput" placeholder="請輸入訊息內容..." class="w-full px-3 py-2 border rounded-md" required>
+                    <button onclick="addMessage()" class="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">新增</button>
+                </div>
+                <div id="messageList" class="border p-2 mt-2 rounded-md bg-gray-100 h-40 overflow-y-auto grid gap-2">
+                    <!-- 訊息內容將顯示在這裡，編號與刪除按鈕 -->
+                </div>
+            </div>
+            
+             <!-- 發訊對象 Popup -->
+        <div id="recipientPopup" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 hidden flex items-center justify-center" onclick="closeRecipientPopup(event)">
+            <div class="bg-white p-6 rounded-lg shadow-lg w-1/3 relative" onclick="event.stopPropagation()">
+                <button class="absolute top-2 right-2 text-gray-500" onclick="closeRecipientPopup(event)">✖</button>
+                <h3 class="text-lg font-bold mb-4">新增發訊對象</h3>
+                <div class="flex items-center space-x-2">
+                    <input type="text" placeholder="請輸入傳訊對象名稱..." class="w-full px-3 py-2 border rounded-md" required>
+                    <button class="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">搜尋</button>
+                </div>
+                <div id="recipientSearchResults" class="border p-2 mt-2 rounded-md bg-gray-100 h-40 overflow-y-auto">
+                    <!-- 搜尋結果將顯示在這裡 -->
+                </div>
+            </div>
+        </div>
+
+            <button class="w-full px-4 py-2 mt-4 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                送出
+            </button>
+        </div>
     </div>
 
     <script>
-        async function checkLoginStatus() {
-            try {
-                const response = await fetch("/check-webdriver-url");
-                const result = await response.json();
-
-                if (!result.logged_in) {
-                    document.getElementById("loginStatus").classList.remove("hidden");
-                    document.getElementById("backToLogin").classList.remove("hidden");
-                }
-            } catch (error) {
-                console.error("檢測登入狀態錯誤:", error);
-            }
+        function openPopup() {
+            document.getElementById("popupForm").classList.remove("hidden");
         }
 
-        document.getElementById("backToLogin").addEventListener("click", function() {
-            window.location.href = "/";
-        });
+        function closePopup(event) {
+            document.getElementById("popupForm").classList.add("hidden");
+        }
 
-        window.onload = checkLoginStatus;
+        function openRecipientPopup() {
+            document.getElementById("recipientPopup").classList.remove("hidden");
+        }
+
+        function closeRecipientPopup(event) {
+            document.getElementById("recipientPopup").classList.add("hidden");
+        }
+
+        function addMessage() {
+            const messageInput = document.getElementById("messageInput");
+            const messageList = document.getElementById("messageList");
+            if (messageInput.value.trim() === "") return;
+
+            const listItem = document.createElement("div");
+            listItem.classList.add("flex", "justify-between", "items-center", "p-2", "bg-white", "shadow", "rounded-md");
+            
+            listItem.innerHTML = `
+                <span class="message-text">${messageList.children.length + 1}. ${messageInput.value}</span>
+                <button class="px-2 py-1 bg-red-500 text-white rounded-md hover:bg-red-600" onclick="removeMessage(this)">刪除</button>
+            `;
+            messageList.appendChild(listItem);
+            messageInput.value = "";
+        }
+
+        function removeMessage(button) {
+            button.parentElement.remove();
+            updateMessageList();
+        }
+
+        function updateMessageList() {
+            const messages = document.querySelectorAll("#messageList .message-text");
+            messages.forEach((message, index) => {
+                message.textContent = `${index + 1}. ${message.parentElement.querySelector(".message-text").textContent.split(". ").slice(1).join(". ")}`;
+            });
+        }
+        
+        document.getElementById("openPopup").addEventListener("click", openPopup);
+        document.getElementById("openRecipientPopup").addEventListener("click", openRecipientPopup);
     </script>
-
 </body>
 </html>

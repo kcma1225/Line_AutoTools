@@ -34,9 +34,9 @@
             <div id="loading" class="hidden text-center text-gray-600">登入中，請稍候...</div>
         </form>
         
-        <button id="goToDashboard"
+        <button id="loginCheck"
             class="w-full px-4 py-2 mt-4 font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">
-                 已登入，直接進入
+                 已登入，直接進入控制面板
         </button>
 
         <div id="pincodeContainer" class="hidden p-4 mt-4 text-center bg-yellow-100 border border-yellow-400 rounded-md">
@@ -48,11 +48,25 @@
     <script>
         let loginAbortController = new AbortController();
         let detectAbortController = new AbortController();
-        document.getElementById("goToDashboard").addEventListener("click", function() {
-            window.location.href = "/dashboard";
+        document.getElementById("loginCheck").addEventListener("click", function() {
+            loginCheckSystem()
         });
 
+        async function loginCheckSystem() {
+            try {
+                const response = await fetch("/check-webdriver-url");
+                const result = await response.json();
 
+                if (!result.logged_in) {
+                    alert("尚未登入");
+                } else {
+                    window.location.href = "/dashboard";
+                }
+            } catch (error) {
+                console.error("檢測登入狀態錯誤:", error);
+            }
+        }
+        
         window.onload = function() {
 
             document.getElementById("loginForm").addEventListener("submit", async (e) => {
