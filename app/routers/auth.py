@@ -44,3 +44,13 @@ async def check_webdriver_url():
         if any(keyword in current_url for keyword in ["friends", "chats", "addFriend"]):
             return {"logged_in": True}
     return {"logged_in": False}
+
+@router.post("/search-target")
+async def search_target(target_name: str = Form(...)):
+    """透過 Selenium 搜尋好友或群組，回傳名稱與頭像 URL"""
+    global bot
+    if bot is None:
+        return {"success": False, "error": "請先登入後再搜尋"}
+    
+    search_results = bot.search_target(target_name)
+    return {"success": True, "data": search_results}
