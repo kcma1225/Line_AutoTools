@@ -41,7 +41,7 @@ function removeMessage(button) {
 
 
 // ------------------------- Form submit -------------------------
-document.getElementById("submitForm").addEventListener("click", function() {
+document.getElementById("submitForm").addEventListener("click", async function() {
     const recipientList = document.querySelectorAll("#recipientList div span");
     const messageTime = document.getElementById("messageTime").value;
     const messageFrequency = document.getElementById("messageFrequency").value;
@@ -60,15 +60,44 @@ document.getElementById("submitForm").addEventListener("click", function() {
         return;
     }
 
-    const formData = {
-        recipients,
-        time: messageTime,
-        frequency: Number(messageFrequency),
-        messages
-    };
+    const formData = new FormData();
+    formData.append("recipients", JSON.stringify(recipients));
+    formData.append("time", messageTime);
+    formData.append("frequency", messageFrequency);
+    formData.append("messages", JSON.stringify(messages));
 
-    alert(JSON.stringify(formData, null, 2));
+    try {
+        const response = await fetch("/save-formdata", {
+            method: "POST",
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            window.location.reload();
+            showSuccessMessage("成功新增定時傳訊對象");
+            closePopup();
+        } else {
+            alert("儲存失敗: " + result.error);
+        }
+    } catch (error) {
+        alert("請求發生錯誤，請稍後再試");
+        console.error("儲存錯誤:", error);
+    }
 });
+
+function showSuccessMessage(message) {
+    const successDiv = document.createElement("div");
+    successDiv.innerText = message;
+    successDiv.classList.add("fixed", "top-4", "right-4", "bg-green-500", "text-white", "p-3", "rounded-md", "shadow-lg", "transition", "opacity-100");
+    document.body.appendChild(successDiv);
+    
+    setTimeout(() => {
+        successDiv.classList.add("opacity-0");
+        setTimeout(() => successDiv.remove(), 500);
+    }, 3000);
+}
+
 
 // ------------------------- Search popup input button ------------------------- 
 document.getElementById("recipientSearchButton").addEventListener("click", async function() {
@@ -148,6 +177,12 @@ function toggleSelection(item, name) {
     }
 }
 
+
+function removeRecipient(button, name) {
+    selectedRecipients.delete(name);
+    button.parentElement.remove();
+}
+
 document.getElementById("confirmSelection").addEventListener("click", () => {
     const recipientList = document.getElementById("recipientList");
     recipientList.innerHTML = "";
@@ -162,3 +197,103 @@ document.getElementById("confirmSelection").addEventListener("click", () => {
     });
     closeRecipientPopup();
 });
+
+//------------------------- 顯示已設定的訊息 -------------------------
+
+document.addEventListener("DOMContentLoaded", async function() {
+    await loadScheduledMessages();
+});
+
+async function loadScheduledMessages() {
+    try {
+        const response = await fetch("/get-scheduled-messages");
+        const result = await response.json();
+        if (result.success) {
+            const scheduleList = document.getElementById("scheduleList");
+            scheduleList.innerHTML = "";
+            result.data.forEach(entry => {
+                const listItem = document.createElement("li");
+                listItem.classList.add("grid", "grid-cols-5", "gap-4", "p-3", "items-center", "text-center");
+                listItem.innerHTML = `
+                    <div class='hidden' data-id="${entry.id}"></div>
+                    <div class="flex items-center justify-center people-icon cursor-pointer">
+                        <span class="font-semibold" onclick="showIconPopup('收件人', ${JSON.stringify(entry.name)})">
+                            ${entry.name.length > 2 ? '<i class="bi bi-people-fill"></i>' : entry.name.join(", ")}
+                        </span>
+                    </div>
+                    <div class="bg-yellow-200 px-3 py-1 rounded-md font-semibold text-gray-800">${entry.time}</div>
+                    <div class="text-gray-700">每 ${entry.period} 天執行一次</div>
+                    <div class="cursor-pointer text-blue-500 chat-icon" onclick="showIconPopup('訊息內容', ${JSON.stringify(entry.msg)})">
+                        <i class="bi bi-chat-dots-fill"></i>
+                    </div>
+                    <div class="cursor-pointer text-red-500 delete-icon" onclick="confirmDelete(${entry.id}, this)">
+                        <i class="bi bi-trash-fill"></i>
+                    </div>
+                `;
+                scheduleList.appendChild(listItem);
+            });
+        }
+    } catch (error) {
+        console.error("載入定時傳訊列表時發生錯誤:", error);
+    }
+}
+
+function confirmDelete(id, element) {
+    if (confirm("確定要刪除此定時傳訊嗎？")) {
+        deleteScheduledMessage(id, element);
+    }
+}
+
+async function deleteScheduledMessage(id, element) {
+    try {
+        const formData = new FormData();
+        formData.append("id", id);
+        const response = await fetch("/delete-scheduled-message", {
+            method: "POST",
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            element.parentElement.remove();
+            showDeleteMessage("定時傳訊已成功刪除");
+        } else {
+            alert("刪除失敗: " + result.error);
+        }
+    } catch (error) {
+        alert("請求發生錯誤，請稍後再試");
+        console.error("刪除錯誤:", error);
+    }
+}
+
+function showIconPopup(title, content) {
+    const overlay = document.createElement("div");
+    overlay.classList.add("fixed", "top-0", "left-0", "w-full", "h-full", "bg-black", "bg-opacity-50", "flex", "items-center", "justify-center", "z-40");
+    
+    const popupDiv = document.createElement("div");
+    popupDiv.classList.add("bg-white", "shadow-lg", "rounded-lg", "p-4", "w-1/3", "z-50");
+    popupDiv.innerHTML = `
+        <h3 class="text-lg font-bold mb-2">${title}</h3>
+        <div class="text-gray-700">${Array.isArray(content) ? content.join("<br>") : content}</div>
+        <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600" onclick="closeIconPopup(this)">關閉</button>
+    `;
+    
+    overlay.appendChild(popupDiv);
+    document.body.appendChild(overlay);
+}
+
+function closeIconPopup(button) {
+    button.parentElement.parentElement.remove();
+}
+
+function showDeleteMessage(message) {
+    const deleteDiv = document.createElement("div");
+    deleteDiv.innerText = message;
+    deleteDiv.classList.add("fixed", "top-4", "right-4", "bg-red-500", "text-white", "p-3", "rounded-md", "shadow-lg", "transition", "opacity-100");
+    document.body.appendChild(deleteDiv);
+    
+    setTimeout(() => {
+        deleteDiv.classList.add("opacity-0");
+        setTimeout(() => deleteDiv.remove(), 500);
+    }, 3000);
+}

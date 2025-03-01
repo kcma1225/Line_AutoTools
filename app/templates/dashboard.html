@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>定時傳訊</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
 </head>
 <body class="h-screen flex">
     <!-- 左側功能列表 -->
@@ -29,14 +30,15 @@
             <!-- 定時傳訊列表 -->
             <div id="scheduleContainer" class="mt-4 p-4 bg-white shadow-lg rounded-lg">
                 <h3 class="text-lg font-bold">已建立的定時傳訊</h3>
-                <ul id="scheduleList" class="mt-2 text-gray-600">
-                    <!-- 模擬定時傳訊列表 -->
+                <ul id="scheduleList" class="mt-2 text-gray-600 divide-y divide-gray-300">
+                    <!-- 這裡將會動態載入 SQLite 的定時傳訊列表 -->
                 </ul>
             </div>
         </div>
     </div>
+    
 
-            <!-- Popup Form -->
+
             <!-- Popup Form -->
             <div id="popupForm" class="fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 hidden flex items-center justify-center" onclick="closePopup(event)">
                 <div class="bg-white p-6 rounded-lg shadow-lg w-1/3 relative" onclick="event.stopPropagation()">
