@@ -74,7 +74,7 @@ document.getElementById("submitForm").addEventListener("click", async function()
         
         const result = await response.json();
         if (result.success) {
-            window.location.reload();
+            await loadScheduledMessages();
             showSuccessMessage("成功新增定時傳訊對象");
             closePopup();
         } else {
@@ -217,20 +217,23 @@ async function loadScheduledMessages() {
                 listItem.innerHTML = `
                     <div class='hidden' data-id="${entry.id}"></div>
                     <div class="flex items-center justify-center people-icon cursor-pointer">
-                        <span class="font-semibold" onclick="showIconPopup('收件人', ${JSON.stringify(entry.name)})">
-                            ${entry.name.length > 2 ? '<i class="bi bi-people-fill"></i>' : entry.name.join(", ")}
+                        <span class="font-semibold">
+                            ${entry.name.length >= 2 ? '<i class="bi bi-people-fill"></i>' : entry.name.join(", ")}
                         </span>
                     </div>
                     <div class="bg-yellow-200 px-3 py-1 rounded-md font-semibold text-gray-800">${entry.time}</div>
                     <div class="text-gray-700">每 ${entry.period} 天執行一次</div>
-                    <div class="cursor-pointer text-blue-500 chat-icon" onclick="showIconPopup('訊息內容', ${JSON.stringify(entry.msg)})">
+                    <div class="cursor-pointer text-blue-500 chat-icon">
                         <i class="bi bi-chat-dots-fill"></i>
                     </div>
-                    <div class="cursor-pointer text-red-500 delete-icon" onclick="confirmDelete(${entry.id}, this)">
+                    <div class="cursor-pointer text-red-500 delete-icon">
                         <i class="bi bi-trash-fill"></i>
                     </div>
                 `;
                 scheduleList.appendChild(listItem);
+                
+                listItem.querySelector(".people-icon").addEventListener("click", () => showIconPopup("收件人", entry.name));
+                listItem.querySelector(".chat-icon").addEventListener("click", () => showIconPopup("訊息內容", entry.msg));
             });
         }
     } catch (error) {
@@ -267,6 +270,10 @@ async function deleteScheduledMessage(id, element) {
 }
 
 function showIconPopup(title, content) {
+    if (!Array.isArray(content)) {
+        content = [content];
+    }
+
     const overlay = document.createElement("div");
     overlay.classList.add("fixed", "top-0", "left-0", "w-full", "h-full", "bg-black", "bg-opacity-50", "flex", "items-center", "justify-center", "z-40");
     
@@ -274,8 +281,8 @@ function showIconPopup(title, content) {
     popupDiv.classList.add("bg-white", "shadow-lg", "rounded-lg", "p-4", "w-1/3", "z-50");
     popupDiv.innerHTML = `
         <h3 class="text-lg font-bold mb-2">${title}</h3>
-        <div class="text-gray-700">${Array.isArray(content) ? content.join("<br>") : content}</div>
-        <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600" onclick="closeIconPopup(this)">關閉</button>
+        <div class="text-gray-700">${content.join("<br>")}</div>
+        <button class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600" onclick="this.parentElement.parentElement.remove()">關閉</button>
     `;
     
     overlay.appendChild(popupDiv);
