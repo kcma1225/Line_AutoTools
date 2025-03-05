@@ -33,26 +33,8 @@ WebDriver 在 FastAPI 啟動時初始化，避免重複開啟瀏覽器
 驗證碼會自動顯示於前端，並監測登入狀態
 `line.crx`  版本(3.6.1)
 ```
+
 4 -- Line自動傳訊息
-├─ app
-│  ├─ line.crx
-│  ├─ main.py
-│  ├─ routers
-│  │  ├─ auth.py
-│  │  ├─ automation.py
-│  │  └─ __init__.py
-│  ├─ services
-│  │  ├─ line.crx
-│  │  ├─ selenium_service.py
-│  │  ├─ task_scheduler.py
-│  │  └─ webdriver_manager.py
-│  └─ templates
-│     ├─ dashboard.html
-│     └─ index.html
-├─ line.crx
-├─ README.md
-├─ requirements.txt
-├─ static
-└─ test.py
+
 
 ```

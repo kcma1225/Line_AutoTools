@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, BackgroundTasks
 from app.services.selenium_service import LineAutoLogin
 from app.services.webdriver_manager import get_webdriver
-import sqlite3, json
+from datetime import datetime, timedelta
+import sqlite3, json, time
 
 
 router = APIRouter()
@@ -19,7 +20,9 @@ def get_db_connection():
             time TEXT,
             period INTEGER,
             msg TEXT,
-            execTimes INTEGER DEFAULT 0
+            status INTEGER DEFAULT 1,
+            execTimes INTEGER DEFAULT 0,
+            last_exec_time TEXT DEFAULT NULL
         )
     ''')
     conn.commit()
@@ -106,7 +109,7 @@ async def get_scheduled_messages():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, time, period, msg FROM target")
+        cursor.execute("SELECT id, name, time, period, msg, status, execTimes, last_exec_time FROM target")
         rows = cursor.fetchall()
         conn.close()
         
@@ -116,13 +119,17 @@ async def get_scheduled_messages():
                 "name": json.loads(row[1]),
                 "time": row[2],
                 "period": row[3],
-                "msg": json.loads(row[4])
+                "msg": json.loads(row[4]),
+                "status": row[5],
+                "execTimes": row[6],
+                "last_exec_time": row[7]  # 新增 last_exec_time 回傳
             } for row in rows
         ]
         
         return {"success": True, "data": scheduled_messages}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
     
     
 @router.post("/delete-scheduled-message")
@@ -136,3 +143,69 @@ async def delete_scheduled_message(id: int = Form(...)):
         return {"success": True, "message": "定時傳訊已刪除"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    
+    
+@router.post("/update-status")
+async def update_status(id: int = Form(...), status: int = Form(...)):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE target SET status = ? WHERE id = ?", (status, id))
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": "狀態已更新"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+    
+
+# ---------------------------- schedule-message
+
+
+@router.post("/schedule-message")
+def schedule_message(background_tasks: BackgroundTasks):
+    """啟動背景任務，監測資料庫並發送訊息"""
+    background_tasks.add_task(check_and_send_messages)
+    return {"message": "定時傳訊已啟動"}
+
+
+def check_and_send_messages():
+    """定期檢查資料庫，找出應該發送的訊息"""
+    while True:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        now = datetime.now()
+        current_time_str = now.strftime("%H:%M")
+        
+        cursor.execute("SELECT id, name, msg, period, execTimes, last_exec_time FROM target WHERE time = ? AND status = 1", (current_time_str,))
+        messages_to_send = cursor.fetchall()
+        
+        for msg in messages_to_send:
+            msg_id, name, message, period, exec_times, last_exec_time = msg
+            
+            should_send = False
+            if last_exec_time:
+                last_exec_date = datetime.strptime(last_exec_time, "%Y-%m-%d")
+                next_exec_date = last_exec_date + timedelta(days=period)
+                if now.date() >= next_exec_date.date():
+                    should_send = True
+            else:
+                should_send = True
+            
+            if should_send:
+                #send_message_via_selenium(name, message)
+                cursor.execute("UPDATE target SET execTimes = execTimes + 1, last_exec_time = ? WHERE id = ?", (now.strftime("%Y-%m-%d"), msg_id))
+                if period == 0:
+                    cursor.execute("UPDATE target SET status = 0 WHERE id = ?", (msg_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        time.sleep(20)  # 休眠 20 秒，避免過度頻繁檢查
+
+@router.post("/schedule-message")
+def schedule_message(background_tasks: BackgroundTasks):
+    """啟動背景任務，監測資料庫並發送訊息"""
+    background_tasks.add_task(check_and_send_messages)
+    return {"message": "定時傳訊已啟動"}
+

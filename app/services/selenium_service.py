@@ -104,3 +104,56 @@ class LineAutoLogin:
             print(f"搜尋失敗: {e}")
         
         return search_results
+    
+    
+    def send_message_via_selenium(self, name_list, msg_list):
+        """使用 Selenium 操控 LINE Web 介面發送訊息"""
+        for name in name_list:
+            try:
+                # 定位搜尋框並輸入目標名稱
+                search_box = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "searchInput-module__input__ekGp7"))
+                )
+                search_box.clear()
+                search_box.send_keys(name)
+                time.sleep(2)  # 等待搜尋結果
+
+                # 判斷是否有搜尋結果
+                error_message = self.driver.find_elements(By.CLASS_NAME, "errorMessage-module__message_area__Hyidf")
+                if error_message:
+                    print(f"❌ 找不到 {name}，跳過...")
+                    continue
+
+                # 定位好友列表並點擊第一個結果
+                friend_list_section = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "friendlist-module__inner__d3xFH"))
+                )
+                items = friend_list_section.find_elements(By.CLASS_NAME, "friendlistItem-module__item__1tuZn")
+                if not items:
+                    print(f"⚠️ 未找到 {name} 的好友條目，跳過...")
+                    continue
+                items[0].find_element(By.CLASS_NAME, "friendlistItem-module__button_friendlist_item__xoWur").click()
+
+                time.sleep(2)  # 等待頁面加載
+
+                # 判斷是否有聊天按鈕（第一種情況）
+                chat_button = self.driver.find_elements(By.CLASS_NAME, "startChat-module__button_start__FjvEK")
+                if chat_button:
+                    chat_button[0].click()
+                    time.sleep(2)  # 等待輸入框顯示
+
+                # 定位輸入框
+                input_box = WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "chatroomEditor-module__textarea__yKTlH"))
+                )
+
+                # 依次輸入訊息並發送
+                for message in msg_list:
+                    input_box.send_keys(message)
+                    input_box.send_keys(Keys.RETURN)
+                    time.sleep(1)
+
+                print(f"✅ 訊息已成功發送給 {name}")
+            except Exception as e:
+                print(f"❌ 無法發送訊息給 {name}，錯誤: {e}")
+                continue

@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from app.routers import auth
 from app.services.webdriver_manager import initialize_webdriver, shutdown_webdriver
+import asyncio
 
 # 初始化 FastAPI
 app = FastAPI()

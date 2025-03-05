@@ -211,9 +211,57 @@ async function loadScheduledMessages() {
         if (result.success) {
             const scheduleList = document.getElementById("scheduleList");
             scheduleList.innerHTML = "";
+            
+            // 添加標題行
+            const headerRow = document.createElement("li");
+            headerRow.classList.add("grid", "grid-cols-7", "gap-4", "p-3", "items-center", "text-center", "font-bold", "bg-gray-200", "rounded-md");
+            headerRow.innerHTML = `
+                <div>傳訊對象</div>
+                <div>時間</div>
+                <div>傳訊週期</div>
+                <div>訊息內容</div>
+                <div>下次執行時間</div>
+                <div>刪除</div>
+                <div>開啟或關閉</div>
+            `;
+            scheduleList.appendChild(headerRow);
+            
             result.data.forEach(entry => {
+                let nextExecution;
+                const now = new Date();
+                const currentTime = now.getHours() * 60 + now.getMinutes();
+                const entryTimeParts = entry.time.split(":"),
+                      entryTimeInMinutes = parseInt(entryTimeParts[0]) * 60 + parseInt(entryTimeParts[1]);
+                
+                if (entry.last_exec_time) {
+                    const lastExecDate = new Date(entry.last_exec_time);
+                    const nextExecDate = new Date(lastExecDate);
+                    nextExecDate.setDate(lastExecDate.getDate() + entry.period);
+                    
+                    const timeDiff = nextExecDate - now;
+                    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    
+                    nextExecution = `約 ${days} 天 ${hours} 小時後`;
+                } else {
+                    let targetTime;
+                    if (currentTime > entryTimeInMinutes) {
+                        targetTime = new Date(now);
+                        targetTime.setDate(now.getDate() + 1);
+                    } else {
+                        targetTime = new Date(now);
+                    }
+                    targetTime.setHours(entryTimeParts[0], entryTimeParts[1], 0, 0);
+                    
+                    const timeDiff = targetTime - now;
+                    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+                    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+                    
+                    nextExecution = `約 ${hours} 小時 ${minutes} 分鐘後`;
+                }
+                
                 const listItem = document.createElement("li");
-                listItem.classList.add("grid", "grid-cols-5", "gap-4", "p-3", "items-center", "text-center");
+                listItem.classList.add("grid", "grid-cols-7", "gap-4", "p-3", "items-center", "text-center", "rounded-md", "transition-colors", entry.status === 1 ? "bg-green-100" : "bg-red-100");
                 listItem.innerHTML = `
                     <div class='hidden' data-id="${entry.id}"></div>
                     <div class="flex items-center justify-center people-icon cursor-pointer">
@@ -226,20 +274,30 @@ async function loadScheduledMessages() {
                     <div class="cursor-pointer text-blue-500 chat-icon">
                         <i class="bi bi-chat-dots-fill"></i>
                     </div>
+                    <div class="text-gray-700">${nextExecution}</div>
                     <div class="cursor-pointer text-red-500 delete-icon">
                         <i class="bi bi-trash-fill"></i>
+                    </div>
+                    <div class="flex items-center justify-center">
+                        <label class="switch">
+                            <input type="checkbox" ${entry.status === 1 ? "checked" : ""} onclick="toggleStatus(${entry.id}, this)">
+                            <span class="slider"></span>
+                        </label>
                     </div>
                 `;
                 scheduleList.appendChild(listItem);
                 
                 listItem.querySelector(".people-icon").addEventListener("click", () => showIconPopup("收件人", entry.name));
                 listItem.querySelector(".chat-icon").addEventListener("click", () => showIconPopup("訊息內容", entry.msg));
+                listItem.querySelector(".delete-icon").addEventListener("click", () => confirmDelete(entry.id, listItem));
             });
         }
     } catch (error) {
         console.error("載入定時傳訊列表時發生錯誤:", error);
     }
 }
+
+
 
 function confirmDelete(id, element) {
     if (confirm("確定要刪除此定時傳訊嗎？")) {
@@ -258,7 +316,7 @@ async function deleteScheduledMessage(id, element) {
         
         const result = await response.json();
         if (result.success) {
-            element.parentElement.remove();
+            element.remove();
             showDeleteMessage("定時傳訊已成功刪除");
         } else {
             alert("刪除失敗: " + result.error);
@@ -303,4 +361,31 @@ function showDeleteMessage(message) {
         deleteDiv.classList.add("opacity-0");
         setTimeout(() => deleteDiv.remove(), 500);
     }, 3000);
+}
+
+async function toggleStatus(id, checkbox) {
+    try {
+        const newStatus = checkbox.checked ? 1 : 0;
+        const formData = new FormData();
+        formData.append("id", id);
+        formData.append("status", newStatus);
+        
+        const response = await fetch("/update-status", {
+            method: "POST",
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            const listItem = checkbox.closest("li");
+            listItem.classList.remove("bg-green-100", "bg-red-100");
+            listItem.classList.add(newStatus === 1 ? "bg-green-100" : "bg-red-100");
+        } else {
+            alert("狀態更新失敗: " + result.error);
+            checkbox.checked = !checkbox.checked; // 還原切換
+        }
+    } catch (error) {
+        alert("請求發生錯誤，請稍後再試");
+        console.error("狀態更新錯誤:", error);
+    }
 }

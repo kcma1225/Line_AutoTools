@@ -61,6 +61,7 @@
                     alert("尚未登入");
                 } else {
                     window.location.href = "/dashboard";
+                    await fetch("/schedule-message", { method: "POST" });
                 }
             } catch (error) {
                 console.error("檢測登入狀態錯誤:", error);
