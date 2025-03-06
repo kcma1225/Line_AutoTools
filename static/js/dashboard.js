@@ -41,50 +41,64 @@ function removeMessage(button) {
 
 
 // ------------------------- Form submit -------------------------
-document.getElementById("submitForm").addEventListener("click", async function() {
-    const recipientList = document.querySelectorAll("#recipientList div span");
-    const messageTime = document.getElementById("messageTime").value;
-    const messageFrequency = document.getElementById("messageFrequency").value;
-    const messageList = document.querySelectorAll("#messageList div span");
+    // 記錄選取的星期
+    let selectedDays = new Set();
 
-    if (recipientList.length === 0 || !messageTime || !messageFrequency || messageList.length === 0) {
-        alert("請確保所有欄位都已填寫！");
-        return;
-    }
+    document.querySelectorAll(".week-btn").forEach(button => {
+        button.addEventListener("click", function () {
+            const day = this.getAttribute("data-day");
 
-    const recipients = Array.from(recipientList).map(span => span.innerText);
-    const messages = Array.from(messageList).map(span => span.innerText.replace(/^\d+\.\s*/, ''));
-
-    if (isNaN(messageFrequency) || messageFrequency < 0 || !Number.isInteger(Number(messageFrequency))) {
-        alert("發訊息週期必須為非負整數");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("recipients", JSON.stringify(recipients));
-    formData.append("time", messageTime);
-    formData.append("frequency", messageFrequency);
-    formData.append("messages", JSON.stringify(messages));
-
-    try {
-        const response = await fetch("/save-formdata", {
-            method: "POST",
-            body: formData
+            if (selectedDays.has(day)) {
+                selectedDays.delete(day);
+                this.classList.remove("bg-green-500", "text-white", "border-green-700");
+                this.classList.add("border-gray-300", "text-gray-700");
+            } else {
+                selectedDays.add(day);
+                this.classList.add("bg-green-500", "text-white", "border-green-700");
+                this.classList.remove("border-gray-300", "text-gray-700");
+            }
         });
-        
-        const result = await response.json();
-        if (result.success) {
-            await loadScheduledMessages();
-            showSuccessMessage("成功新增定時傳訊對象");
-            closePopup();
-        } else {
-            alert("儲存失敗: " + result.error);
+    });
+
+    document.getElementById("submitForm").addEventListener("click", async function () {
+        const recipientList = document.querySelectorAll("#recipientList div span");
+        const messageTime = document.getElementById("messageTime").value;
+        const messageList = document.querySelectorAll("#messageList div span");
+
+        if (recipientList.length === 0 || !messageTime || messageList.length === 0) {
+            alert("請確保所有欄位都已填寫！");
+            return;
         }
-    } catch (error) {
-        alert("請求發生錯誤，請稍後再試");
-        console.error("儲存錯誤:", error);
-    }
-});
+
+        const recipients = Array.from(recipientList).map(span => span.innerText);
+        const messages = Array.from(messageList).map(span => span.innerText.replace(/^\d+\.\s*/, ''));
+        const week = Array.from(selectedDays).map(Number).sort(); // 轉換為數字並排序 (若為空則回傳 `[]`)
+
+        const formData = new FormData();
+        formData.append("recipients", JSON.stringify(recipients));
+        formData.append("time", messageTime);
+        formData.append("week", JSON.stringify(week)); // `week` 可以為 `[]`
+        formData.append("messages", JSON.stringify(messages));
+
+        try {
+            const response = await fetch("/save-formdata", {
+                method: "POST",
+                body: formData
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                await loadScheduledMessages();
+                showSuccessMessage("成功新增定時傳訊對象");
+                closePopup();
+            } else {
+                alert("儲存失敗: " + result.error);
+            }
+        } catch (error) {
+            alert("請求發生錯誤，請稍後再試");
+            console.error("儲存錯誤:", error);
+        }
+    });
 
 function showSuccessMessage(message) {
     const successDiv = document.createElement("div");
@@ -211,57 +225,36 @@ async function loadScheduledMessages() {
         if (result.success) {
             const scheduleList = document.getElementById("scheduleList");
             scheduleList.innerHTML = "";
-            
+
             // 添加標題行
             const headerRow = document.createElement("li");
-            headerRow.classList.add("grid", "grid-cols-7", "gap-4", "p-3", "items-center", "text-center", "font-bold", "bg-gray-200", "rounded-md");
+            headerRow.classList.add("grid", "grid-cols-6", "gap-4", "p-3", "items-center", "text-center", "font-bold", "bg-gray-200", "rounded-md");
             headerRow.innerHTML = `
                 <div>傳訊對象</div>
                 <div>時間</div>
-                <div>傳訊週期</div>
+                <div>執行星期</div>
                 <div>訊息內容</div>
-                <div>下次執行時間</div>
                 <div>刪除</div>
                 <div>開啟或關閉</div>
             `;
             scheduleList.appendChild(headerRow);
-            
+
             result.data.forEach(entry => {
-                let nextExecution;
-                const now = new Date();
-                const currentTime = now.getHours() * 60 + now.getMinutes();
-                const entryTimeParts = entry.time.split(":"),
-                      entryTimeInMinutes = parseInt(entryTimeParts[0]) * 60 + parseInt(entryTimeParts[1]);
+                // 轉換 week 陣列成 "一二三四五六日" 顯示格式
+                const weekMapping = ["一", "二", "三", "四", "五", "六", "日"];
+                let weekDisplay = "";
                 
-                if (entry.last_exec_time) {
-                    const lastExecDate = new Date(entry.last_exec_time);
-                    const nextExecDate = new Date(lastExecDate);
-                    nextExecDate.setDate(lastExecDate.getDate() + entry.period);
-                    
-                    const timeDiff = nextExecDate - now;
-                    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-                    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    
-                    nextExecution = `約 ${days} 天 ${hours} 小時後`;
-                } else {
-                    let targetTime;
-                    if (currentTime > entryTimeInMinutes) {
-                        targetTime = new Date(now);
-                        targetTime.setDate(now.getDate() + 1);
+
+                for (let i = 0; i < 7; i++) {
+                    if (entry.week.includes(i + 1)) {
+                        weekDisplay += `<span class="text-green-500 font-bold">${weekMapping[i]}</span> `;
                     } else {
-                        targetTime = new Date(now);
+                        weekDisplay += `<span class="text-red-500">${weekMapping[i]}</span> `;
                     }
-                    targetTime.setHours(entryTimeParts[0], entryTimeParts[1], 0, 0);
-                    
-                    const timeDiff = targetTime - now;
-                    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-                    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-                    
-                    nextExecution = `約 ${hours} 小時 ${minutes} 分鐘後`;
                 }
-                
+
                 const listItem = document.createElement("li");
-                listItem.classList.add("grid", "grid-cols-7", "gap-4", "p-3", "items-center", "text-center", "rounded-md", "transition-colors", entry.status === 1 ? "bg-green-100" : "bg-red-100");
+                listItem.classList.add("grid", "grid-cols-6", "gap-4", "p-3", "items-center", "text-center", "rounded-md", "transition-colors", entry.status === 1 ? "bg-green-100" : "bg-red-100");
                 listItem.innerHTML = `
                     <div class='hidden' data-id="${entry.id}"></div>
                     <div class="flex items-center justify-center people-icon cursor-pointer">
@@ -270,11 +263,10 @@ async function loadScheduledMessages() {
                         </span>
                     </div>
                     <div class="bg-yellow-200 px-3 py-1 rounded-md font-semibold text-gray-800">${entry.time}</div>
-                    <div class="text-gray-700">每 ${entry.period} 天執行一次</div>
+                    <div class="text-gray-700">${weekDisplay}</div>
                     <div class="cursor-pointer text-blue-500 chat-icon">
                         <i class="bi bi-chat-dots-fill"></i>
                     </div>
-                    <div class="text-gray-700">${nextExecution}</div>
                     <div class="cursor-pointer text-red-500 delete-icon">
                         <i class="bi bi-trash-fill"></i>
                     </div>
@@ -286,7 +278,7 @@ async function loadScheduledMessages() {
                     </div>
                 `;
                 scheduleList.appendChild(listItem);
-                
+
                 listItem.querySelector(".people-icon").addEventListener("click", () => showIconPopup("收件人", entry.name));
                 listItem.querySelector(".chat-icon").addEventListener("click", () => showIconPopup("訊息內容", entry.msg));
                 listItem.querySelector(".delete-icon").addEventListener("click", () => confirmDelete(entry.id, listItem));
@@ -296,6 +288,7 @@ async function loadScheduledMessages() {
         console.error("載入定時傳訊列表時發生錯誤:", error);
     }
 }
+
 
 
 
