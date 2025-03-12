@@ -3,6 +3,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 
 class LineAutoLogin:
     def __init__(self, driver, email, password):
@@ -79,7 +81,12 @@ class LineAutoLogin:
             friend_list_section = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CLASS_NAME, "friendlist-module__inner__d3xFH"))
             )
-            items = friend_list_section.find_elements(By.CLASS_NAME, "friendlistItem-module__item__1tuZn")
+            
+            #items = friend_list_section.find_elements(By.CLASS_NAME, "friendlistItem-module__item__1tuZn")
+            
+            items = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_all_elements_located((By.CLASS_NAME, "friendlistItem-module__item__1tuZn"))
+            )
             
             for item in items:
                 item_id = item.get_attribute("data-mid")
@@ -124,7 +131,7 @@ class LineAutoLogin:
                     print(f"❌ 找不到 {name}，跳過...")
                     continue
 
-                # 定位好友列表並點擊第一個結果
+                # 定位好友列表
                 friend_list_section = WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "friendlist-module__inner__d3xFH"))
                 )
@@ -132,28 +139,44 @@ class LineAutoLogin:
                 if not items:
                     print(f"⚠️ 未找到 {name} 的好友條目，跳過...")
                     continue
-                items[0].find_element(By.CLASS_NAME, "friendlistItem-module__button_friendlist_item__xoWur").click()
+
+                # 嘗試點擊「進入聊天室」按鈕，避免 Click Intercepted
+                chat_button = items[0].find_element(By.CLASS_NAME, "friendlistItem-module__button_friendlist_item__xoWur")
+
+                try:
+                    # **使用 JavaScript 強制點擊**
+                    self.driver.execute_script("arguments[0].scrollIntoView();", chat_button)
+                    time.sleep(0.5)  # 等待滾動
+                    self.driver.execute_script("arguments[0].click();", chat_button)
+                except ElementClickInterceptedException:
+                    print(f"⚠️ 按鈕被擋住，嘗試滑動並重新點擊 {name}")
+                    ActionChains(self.driver).move_to_element(chat_button).click().perform()
 
                 time.sleep(2)  # 等待頁面加載
 
-                # 判斷是否有聊天按鈕（第一種情況）
-                chat_button = self.driver.find_elements(By.CLASS_NAME, "startChat-module__button_start__FjvEK")
-                if chat_button:
-                    chat_button[0].click()
+                # **檢查是否有「開始聊天」按鈕**
+                start_chat_button = self.driver.find_elements(By.CLASS_NAME, "startChat-module__button_start__FjvEK")
+                if start_chat_button:
+                    start_chat_button[0].click()
                     time.sleep(2)  # 等待輸入框顯示
 
-                # 定位輸入框
-                input_box = WebDriverWait(self.driver, 10).until(
+                # **檢查是否成功進入聊天室**
+                chat_area = WebDriverWait(self.driver, 5).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "chatroomEditor-module__textarea__yKTlH"))
                 )
 
-                # 依次輸入訊息並發送
+                # **依次輸入訊息並發送**
                 for message in msg_list:
-                    input_box.send_keys(message)
-                    input_box.send_keys(Keys.RETURN)
+                    chat_area.send_keys(message)
+                    chat_area.send_keys(Keys.RETURN)
                     time.sleep(1)
 
                 print(f"✅ 訊息已成功發送給 {name}")
+
+            except TimeoutException:
+                print(f"❌ 超時錯誤，無法找到 {name} 的聊天介面")
+            except ElementClickInterceptedException:
+                print(f"❌ 無法點擊 {name} 的聊天室，可能是 UI 遮擋")
             except Exception as e:
                 print(f"❌ 無法發送訊息給 {name}，錯誤: {e}")
-                continue
+            

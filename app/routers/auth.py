@@ -288,9 +288,44 @@ async def get_scheduled_by_week(day: int):
         return {"success": False, "error": str(e)}
 
 
-@router.post("/schedule-message")
-def schedule_message(background_tasks: BackgroundTasks):
-    """啟動背景任務，監測資料庫並發送訊息"""
-    background_tasks.add_task(check_and_send_messages)
-    return {"message": "定時傳訊已啟動"}
+@router.post("/send-test-messages")
+async def send_test_messages():
+    """忽略時間與日期，直接發送所有 `status=1` 的訊息"""
+    global bot
+
+    if bot is None or not bot.logged_in:
+        return {"success": False, "error": "請先登入後再發送訊息"}
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 取得所有 `status=1` 的訊息
+        cursor.execute("SELECT id, name, msg FROM target WHERE status = 1")
+        messages_to_send = cursor.fetchall()
+        
+        if not messages_to_send:
+            return {"success": False, "message": "沒有可發送的訊息"}
+
+        for msg in messages_to_send:
+            msg_id, name_json, message_json = msg
+            
+            # 解析 JSON
+            try:
+                name_list = json.loads(name_json)
+                msg_list = json.loads(message_json)
+            except json.JSONDecodeError:
+                print(f"⚠️ 訊息 ID {msg_id} JSON 解析失敗，跳過")
+                continue
+            
+            # 呼叫 Selenium 發送訊息
+            bot.send_message_via_selenium(name_list, msg_list)
+
+        conn.close()
+        return {"success": True, "message": "已成功發送所有訊息"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 
