@@ -103,6 +103,24 @@
             </div>
         </div>
     </div>
+    <script>
+        async function checkLoginStatus() {
+            try {
+                const response = await fetch("/check-webdriver-url");
+                const result = await response.json();
+                if (!result.logged_in) {
+                    document.getElementById("loginStatus").classList.remove("hidden");
+                    document.getElementById("backToLogin").classList.remove("hidden");
+                }
+            } catch (error) {
+                console.error("檢測登入狀態錯誤:", error);
+            }
+        }
+
+        window.onload = function() {
+            checkLoginStatus();
+        };
+    </script>
     <script src="/static/js/dashboard.js"></script>
     
     <script>

@@ -1,3 +1,4 @@
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import APIRouter, Form, BackgroundTasks
 from app.services.selenium_service import LineAutoLogin
 from app.services.webdriver_manager import get_webdriver
@@ -8,6 +9,34 @@ import sqlite3, json, time
 router = APIRouter()
 bot = None  
 
+# 初始化排程器
+scheduler = BackgroundScheduler()
+scheduler_running = False  # **確保排程器不會重複啟動**
+
+# ---------------------------- schedule-message
+@router.on_event("shutdown")
+async def shutdown_event():
+    """FastAPI 關閉時，關閉 Scheduler"""
+    global scheduler_running
+    if scheduler_running:
+        scheduler.shutdown()
+        scheduler_running = False
+        print("🛑 Scheduler 已關閉")
+    else:
+        print("⚠️ Scheduler 未運行，跳過關閉")
+
+# **啟動 Scheduler（確保不會重複啟動）**
+def start_scheduler():
+    """啟動 Scheduler，確保不會重複啟動"""
+    global scheduler_running
+    if not scheduler_running:
+        scheduler.add_job(check_and_send_messages, "interval", seconds=30)  # **每 60 秒執行一次**
+        scheduler.start()
+        scheduler_running = True
+        print("✅ Scheduler 啟動成功")
+    else:
+        print("⚠️ Scheduler 已在運行，跳過啟動")
+        
 # ---------------------------- database Create    
 def get_db_connection():
     """初始化 SQLite 資料庫，確保表格存在"""
@@ -33,12 +62,11 @@ def get_db_connection():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            target_id INTEGER,
             name TEXT,
-            time TEXT,
             msg TEXT,
-            exec_time TEXT,
-            FOREIGN KEY (target_id) REFERENCES target(id)
+            timestamp TEXT,
+            status INTEGER DEFAULT 1,   -- 新增狀態 1: 成功, 0: 失敗
+            error_msg TEXT DEFAULT NULL -- 失敗時記錄錯誤訊息
         )
     ''')
 
@@ -69,7 +97,7 @@ async def check_pincode():
 
 @router.get("/check-login")
 async def check_login():
-    """檢測是否成功登入，若進入 /friends 則回傳 True，結束檢測"""
+    """檢查是否登入"""
     global bot
     if bot:
         return bot.check_login_status()
@@ -151,6 +179,9 @@ async def get_scheduled_messages():
             } for row in rows
         ]
         
+        # **確保 Scheduler 啟動**
+        start_scheduler()
+        
         return {"success": True, "data": scheduled_messages}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -188,75 +219,77 @@ async def update_status(id: int = Form(...), status: int = Form(...)):
 import datetime
 
 def check_and_send_messages():
-    """定期檢查資料庫，找出應該發送的訊息"""
-    while True:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        now = datetime.datetime.now()
-        current_time_str = now.strftime("%H:%M")
-        current_weekday = now.weekday() + 1  # **星期一=1，星期日=7**
+    """根據資料庫的設定，定期發送訊息"""
+    global bot
+    conn = sqlite3.connect("LineDB.db")
+    cursor = conn.cursor()
 
-        # **取得符合時間的訊息**
+    # **取得當前時間（時:分）**
+    current_time_str = datetime.datetime.now().strftime("%H:%M")
+    current_weekday = datetime.datetime.now().weekday() + 1  # **星期一=1，星期日=7**
+
+    # **取得所有 `status=1`，且 `time` 符合當前時間的訊息**
+    cursor.execute(
+        "SELECT id, name, msg, week, time, status, execTimes, last_exec_time FROM target WHERE status = 1 AND time = ?",
+        (current_time_str,)
+    )
+    messages_to_send = cursor.fetchall()
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not messages_to_send:
+        print(f" ✅  {now} 沒有符合條件的訊息")
+        conn.close()
+        return
+
+    # **確保 `bot` 已登入**
+    if bot is None or not bot.logged_in:
+        print("⚠️ Bot 未登入，無法發送訊息")
+        conn.close()
+        return
+
+    for msg in messages_to_send:
+        msg_id, name_json, message_json, week_json, time_str, status, exec_times, last_exec_time = msg
+
+        # **解析 JSON**
+        try:
+            name_list = json.loads(name_json)
+            msg_list = json.loads(message_json)
+            week_list = json.loads(week_json)
+        except json.JSONDecodeError:
+            print(f"❌ 訊息 ID {msg_id} JSON 解析失敗，跳過")
+            continue
+
+        # **檢查是否符合當前星期**
+        if current_weekday not in week_list:
+            continue  # 當前星期不在指定 `week`，跳過
+
+        # **確保不會重複發送**
+        if last_exec_time:
+            last_exec_date = datetime.datetime.strptime(last_exec_time, "%Y-%m-%d")
+            if datetime.datetime.now().date() == last_exec_date.date():
+                print(f"⏩ [跳過] 訊息 ID {msg_id} 今天已發送過")
+                continue  # **避免同一天重複發送**
+
+        # **發送訊息**
+        print(f"📩 發送訊息給 {name_list}: {msg_list}")
+        send_status = 1  # **預設為成功**
+        error_msg = None
+
+        try:
+            bot.send_message_via_selenium(name_list, msg_list)  # **執行 Selenium 發送**
+        except Exception as e:
+            print(f"❌ 訊息 ID {msg_id} 發送失敗: {e}")
+            send_status = 0  # **失敗**
+            error_msg = str(e)
+
+        # **更新 `execTimes` 和 `last_exec_time`**
         cursor.execute(
-            "SELECT id, name, msg, week, status, execTimes, last_exec_time FROM target WHERE time = ? AND status = 1",
-            (current_time_str,)
+            "UPDATE target SET execTimes = execTimes + 1, last_exec_time = ? WHERE id = ?",
+            (datetime.datetime.now().strftime("%Y-%m-%d"), msg_id)
         )
 
-        messages_to_send = cursor.fetchall()
-
-        for msg in messages_to_send:
-            msg_id, name, message, week_json, status, exec_times, last_exec_time = msg
-
-            # **解析 `week`**
-            try:
-                week_list = json.loads(week_json)
-            except json.JSONDecodeError:
-                print(f"⚠️ [錯誤] 訊息 ID {msg_id} 的 `week` 欄位 JSON 解析失敗，跳過")
-                continue
-
-            # **如果 week 為空且 status=1，則發送後關閉**
-            if not week_list and status == 1:
-                print(f"⚠️ [警告] 訊息 ID {msg_id} 沒有指定發送日期，發送後關閉")
-                should_send = True
-                auto_disable = True
-            else:
-                # **檢查當前星期是否在 `week_list` 中**
-                should_send = current_weekday in week_list
-                auto_disable = False
-
-            # **確保不會重複發送**
-            if should_send:
-                if last_exec_time:
-                    last_exec_date = datetime.datetime.strptime(last_exec_time, "%Y-%m-%d")
-                    if now.date() == last_exec_date.date():
-                        print(f"⏩ [跳過] 訊息 ID {msg_id} 今天已發送過")
-                        continue  # **避免同一天重複發送**
-
-                # **記錄發送時間到 `history`**
-                cursor.execute(
-                    "INSERT INTO history (target_id, name, time, msg, exec_time) VALUES (?, ?, ?, ?, ?)",
-                    (msg_id, name, current_time_str, message, now.strftime("%Y-%m-%d %H:%M:%S"))
-                )
-
-                # **更新 `target` 表**
-                cursor.execute(
-                    "UPDATE target SET execTimes = execTimes + 1, last_exec_time = ? WHERE id = ?",
-                    (now.strftime("%Y-%m-%d"), msg_id)
-                )
-
-                # **如果 `week` 為空，則自動關閉 `status=0`**
-                if auto_disable:
-                    cursor.execute(
-                        "UPDATE target SET status = 0 WHERE id = ?",
-                        (msg_id,)
-                    )
-                    print(f"🚫 [已關閉] 訊息 ID {msg_id} 執行後已自動停用")
-
-        conn.commit()
-        conn.close()
-        time.sleep(20)  # **避免過度頻繁檢查**
-
-
+    conn.commit()
+    conn.close()
 
 @router.get("/get-scheduled-by-week")
 async def get_scheduled_by_week(day: int):
@@ -287,10 +320,51 @@ async def get_scheduled_by_week(day: int):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@router.post("/save-history")
+async def save_history_api(
+    name: str = Form(...),  # 單獨的 name
+    msg_list: str = Form(...),   # 這裡 msg_list 會是 JSON 字串
+    timestamp: str = Form(...),  # 訊息時間
+    status: int = Form(...),  # 1: 成功, 0: 失敗
+    error_msg: str = Form(None)  # 預設為 NULL，失敗時才會有錯誤訊息
+):
+    """儲存發送訊息的歷史記錄（允許 `selenium_service.py` 呼叫）"""
+    try:
+        conn = sqlite3.connect("LineDB.db")
+        cursor = conn.cursor()
 
+        # **確保 msg_list 是 JSON**
+        try:
+            msg_list_json = json.loads(msg_list)  # 解析 JSON
+            if not isinstance(msg_list_json, list):
+                raise ValueError("msg_list 應為 list")
+        except (json.JSONDecodeError, ValueError):
+            return {"success": False, "error": "msg_list 必須是 JSON 格式的 list"}
+
+        # **存入 history**
+        cursor.execute(
+            """
+            INSERT INTO history (name, msg, timestamp, status, error_msg) 
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (name, json.dumps(msg_list_json, ensure_ascii=False), timestamp, status, error_msg)
+        )
+
+        conn.commit()
+        conn.close()
+        return {"success": True, "message": "歷史記錄已成功儲存"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+
+
+
+"""
 @router.post("/send-test-messages")
 async def send_test_messages():
-    """忽略時間與日期，直接發送所有 `status=1` 的訊息"""
+   #忽略時間與日期，直接發送所有 `status=1` 的訊息
     global bot
 
     if bot is None or not bot.logged_in:
@@ -326,6 +400,4 @@ async def send_test_messages():
 
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-
+"""

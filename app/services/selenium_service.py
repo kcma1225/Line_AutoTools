@@ -1,4 +1,4 @@
-import time
+import time, requests, json, datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -117,6 +117,10 @@ class LineAutoLogin:
         """使用 Selenium 操控 LINE Web 介面發送訊息"""
         for name in name_list:
             try:
+                status = 1
+                error_msg = ""
+                start_time = time.time()
+                
                 # 定位搜尋框並輸入目標名稱
                 search_box = WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "searchInput-module__input__ekGp7"))
@@ -173,10 +177,44 @@ class LineAutoLogin:
 
                 print(f"✅ 訊息已成功發送給 {name}")
 
-            except TimeoutException:
-                print(f"❌ 超時錯誤，無法找到 {name} 的聊天介面")
-            except ElementClickInterceptedException:
-                print(f"❌ 無法點擊 {name} 的聊天室，可能是 UI 遮擋")
+            except TimeoutException as e:
+                status = 0
+                error_msg = "❌ 超時錯誤，無法找到 {name} 的聊天介面"
+                print(error_msg)
+            except ElementClickInterceptedException as e:
+                status = 0
+                error_msg = f"❌ 無法點擊 {name} 的聊天室，可能是 UI 遮擋"
+                print(error_msg)
             except Exception as e:
-                print(f"❌ 無法發送訊息給 {name}，錯誤: {e}")
+                status = 0
+                error_msg = f"❌ 發生未知錯誤: {e}"
+                print(error_msg)
             
+            
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            try:
+                data = {
+                    "name": name,
+                    "msg_list": json.dumps(msg_list),
+                    "timestamp": timestamp,
+                    "status": status,
+                    "error_msg": error_msg if error_msg else ""
+                }
+                response = requests.post("http://127.0.0.1:8000/save-history", data=data)
+                print(f"📌 API 回應: {response.json()}")
+                
+            except Exception as e:
+                print(f"❌ 發送失敗: {e}")
+
+                # **發送失敗，也要記錄 history**
+                data = {
+                    "name": name,
+                    "msg_list": json.dumps(msg_list),
+                    "timestamp": timestamp,
+                    "status": 0,
+                    "error_msg": error_msg if error_msg else "未知錯誤"
+                }
+                requests.post("http://127.0.0.1:8000/save-history", data=data)
+            
+            print(data)
